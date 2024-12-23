@@ -213,6 +213,3 @@ else:
 
 # %%
 st.sidebar.selectbox('Select_Player', df.PLAYER_FIRST_NAME.sort_values().unique() )
-
-fig = px.pie(df.PLAYER_FIRST_NAME, values='HID', names='drill_names')
-if st.sidebar.selectbox('I:',['f']) == 'f': b()
