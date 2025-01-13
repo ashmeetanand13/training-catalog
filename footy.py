@@ -5,6 +5,9 @@ import plotly.express as px
 import altair as alt
 from itertools import combinations
 from tqdm import tqdm
+import pandas as pd
+from thefuzz import fuzz
+from thefuzz import process
 
 def get_data_info(file):
     """
