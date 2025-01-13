@@ -1,5 +1,5 @@
-altair==4.2.0
-fuzzywuzzy==0.18.0
-pandas==1.4.1
-streamlit==1.12.2
+altair>=5.0.0
+thefuzz>=0.19.0 
+pandas>=2.0.0
+streamlit>=1.29.0
 numpy>=2.0.0
