@@ -23,17 +23,53 @@ def get_drill_time(df):
     return (df['end time'] - df['start time']).dt.total_seconds()/60
 
 def get_drill_names(df):
-    """Extract and process drill names"""
+    """Extract and process drill names with fuzzy matching and uppercase standardization"""
+    # Convert drill titles to uppercase
+    df['DRILL TITLE'] = df['DRILL TITLE'].str.upper()
+    
+    # Split and process drill titles
     drill_title = df['DRILL TITLE'].str.split(':', expand=True).iloc[:,:5]
     drill_title = drill_title[~drill_title[4].isna()]
-    return drill_title.iloc[:,:4].apply(lambda row: ':'.join(row.values.astype(str)), axis=1)
+    
+    # Join the first 4 columns and get unique drill names
+    drill_names = drill_title.iloc[:,:4].apply(lambda row: ':'.join(row.values.astype(str)), axis=1)
+    unique_drills = list(set(drill_names))
+    
+    # Perform fuzzy matching to combine similar drill names
+    final_drills = []
+    processed_drills = set()
+    
+    for drill in unique_drills:
+        if drill not in processed_drills:
+            # Find all similar drills with 96% or higher similarity
+            matches = process.extract(drill, unique_drills, scorer=fuzz.ratio, limit=None)
+            similar_drills = [match[0] for match in matches if match[1] >= 96]
+            
+            # Add all similar drills to processed set
+            processed_drills.update(similar_drills)
+            
+            # Use the first occurrence as the standardized name
+            if similar_drills:
+                final_drills.append(similar_drills[0])
+    
+    # Create a mapping dictionary for similar drills
+    drill_mapping = {}
+    for drill in unique_drills:
+        best_match = process.extractOne(drill, final_drills, scorer=fuzz.ratio)
+        drill_mapping[drill] = best_match[0]
+    
+    # Apply the mapping to standardize drill names
+    return drill_names.map(drill_mapping)
 
 def get_target_metric(df, selected_drills, metrics, drill_times):
-    """Calculate metrics per minute for selected drills"""
+    # """Calculate metrics per minute for selected drills"""
+    # Convert selected drills to uppercase for consistency
+    selected_drills = [drill.upper() for drill in selected_drills]
+    
     results = []
     
     for drill, time_multiplier in zip(selected_drills, drill_times):
-        drill_data = df[df['Drill title 2'] == drill]
+        drill_data = df[df['Drill title 2'].str.upper() == drill]
         
         if drill_data.empty:
             continue
@@ -57,6 +93,8 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
     
     return pd.DataFrame()
 
+# Streamlit UI
+st.title('Soccer Pre-Training Analysis')
 # Streamlit UI
 st.title('Soccer Pre-Training Analysis')
 
