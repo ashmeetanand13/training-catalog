@@ -95,8 +95,6 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
 
 # Streamlit UI
 st.title('Soccer Pre-Training Analysis')
-# Streamlit UI
-st.title('Soccer Pre-Training Analysis')
 
 # File upload
 uploaded_file = st.file_uploader("Upload GPS file", type=['gps', 'csv'])
