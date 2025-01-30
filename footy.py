@@ -177,21 +177,23 @@ if uploaded_file is not None:
             )
         
         # Set drill durations
-        drill_times = []
-        if drill_names:
-            st.subheader("Set Duration for Each Drill (minutes)")
-            cols = st.columns(min(2, len(drill_names)))
-            for idx, drill in enumerate(drill_names):
-                with cols[idx % 2]:
-                    drill_time = st.slider(
+            drill_times = []
+            if drill_names:
+                st.subheader("Set Duration for Each Drill (minutes)")
+                cols = st.columns(min(2, len(drill_names)))
+                for idx, drill in enumerate(drill_names):
+                    with cols[idx % 2]:
                         parts = drill.split(":")
                         drill_part = parts[1] if len(parts) > 1 else parts[0]
-                        f'{drill_part}'
-                        2, 30, 2,
-                        key=f"time_{idx}"
-                    )
-                drill_times.append(drill_time)
-        
+                        drill_time = st.slider(
+                            label=f'{drill_part}',
+                            min_value=2,
+                            max_value=30,
+                            value=2,
+                            key=f"time_{idx}"
+                        )
+                        drill_times.append(drill_time)
+                    
         # Calculate and display results
         if len(drill_names) > 0:
             final_data = get_target_metric(df_filtered, drill_names, selected_metrics, drill_times)
