@@ -15,6 +15,7 @@ def get_data_info(file):
     Works with both uploaded files and file paths.
     """
     df = pd.read_csv(file)
+    df.columns = df.columns.str.upper()  # This line makes all columns uppercase
     all_columns = df.columns.tolist()
     player_names = df['PLAYER FIRST NAME'].unique().tolist()
     return df, all_columns, player_names
