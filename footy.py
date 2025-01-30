@@ -19,11 +19,18 @@ def get_data_info(file):
     all_columns = df.columns.tolist()
     player_names = df['PLAYER NAME'].unique().tolist()
     return df, all_columns, player_names
-
+    
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
-    df['start time'] = pd.to_datetime(df['DRILL START TIME'])
-    df['end time'] = pd.to_datetime(df['DRILL END TIME'])
+    # Find start time column - check both naming conventions
+    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME']), None)
+    
+    if not start_col or not end_col:
+        raise ValueError("Could not find start/end time columns")
+    
+    df['start time'] = pd.to_datetime(df[start_col])
+    df['end time'] = pd.to_datetime(df[end_col])
     return (df['end time'] - df['start time']).dt.total_seconds()/60
 
 def get_drill_names(df):
