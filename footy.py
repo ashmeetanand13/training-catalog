@@ -78,10 +78,10 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
         if drill_data.empty:
             continue
             
-        for player in drill_data['PLAYER FIRST NAME'].unique():
-            player_data = drill_data[drill_data['PLAYER FIRST NAME'] == player]
+        for player in drill_data['PLAYER NAME'].unique():
+            player_data = drill_data[drill_data['PLAYER NAME'] == player]
             player_metrics = {
-                "PLAYER FIRST NAME": player,
+                "PLAYER NAME": player,
             }
             
             for metric in metrics:
@@ -93,7 +93,7 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
     
     if results:
         final_df = pd.DataFrame(results)
-        return final_df.groupby(['PLAYER FIRST NAME']).sum()
+        return final_df.groupby(['PLAYER NAME']).sum()
     
     return pd.DataFrame()
 
@@ -128,7 +128,7 @@ if uploaded_file is not None:
     
     if selected_players:
         # Filter data for selected players
-        df_filtered = df[df['PLAYER FIRST NAME'].isin(selected_players)]
+        df_filtered = df[df['PLAYER NAME'].isin(selected_players)]
         
         # Calculate drill times
         df_filtered['time'] = get_drill_time(df_filtered)
@@ -141,11 +141,11 @@ if uploaded_file is not None:
         
         if force_check:
             drills_with_all_players = (
-                df_filtered.groupby('Drill title 2')['PLAYER FIRST NAME']
+                df_filtered.groupby('Drill title 2')['PLAYER NAME']
                 .apply(lambda x: set(x) == set(selected_players))
                 .reset_index()
             )
-            valid_drills = drills_with_all_players[drills_with_all_players['PLAYER FIRST NAME'] == True]['Drill title 2']
+            valid_drills = drills_with_all_players[drills_with_all_players['PLAYER NAME'] == True]['Drill title 2']
             drill_names = st.sidebar.multiselect(
                 "Select Drill", valid_drills, [], disabled=False
             )
@@ -187,7 +187,7 @@ if uploaded_file is not None:
                         height=400,
                         width=800
                     ).mark_bar().encode(
-                        x=alt.X('PLAYER FIRST NAME', sort=None),
+                        x=alt.X('PLAYER NAME', sort=None),
                         y=metric
                     )
                     st.altair_chart(chart)
@@ -199,7 +199,7 @@ if uploaded_file is not None:
                         final_data_reset,
                         x='HIGH SPEED RUNNING ABSOLUTE',
                         y='DISTANCE Z6 ABSOLUTE',
-                        color='PLAYER FIRST NAME',
+                        color='PLAYER NAME',
                         title='HID vs VHID by Player'
                     )
                     
@@ -233,7 +233,7 @@ if uploaded_file is not None:
                         final_data_reset,
                         x='ACCELERATIONS',
                         y='DECELERATIONS',
-                        color='PLAYER FIRST NAME',
+                        color='PLAYER NAME',
                         title='ACCELERATION vs DECELERATION by Player'
                     )
                     
