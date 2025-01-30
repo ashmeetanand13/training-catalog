@@ -45,11 +45,19 @@ def get_drill_names(df):
     df[drill_col] = df[drill_col].str.upper()
     
     # Split and process drill titles
-    drill_title = df[drill_col].str.split(':', expand=True).iloc[:,:5]
-    drill_title = drill_title[~drill_title[4].isna()]
+    drill_title = df[drill_col].str.split(':', expand=True)
     
-    # Join the first 4 columns and get unique drill names
-    drill_names = drill_title.iloc[:,:4].apply(lambda row: ':'.join(row.values.astype(str)), axis=1)
+    # Check how many columns we actually got after splitting
+    num_cols = len(drill_title.columns)
+    
+    if num_cols < 5:
+        # If we have fewer than 5 columns, just use all available columns
+        drill_names = drill_title.iloc[:,:num_cols].apply(lambda row: ':'.join(row.dropna().values.astype(str)), axis=1)
+    else:
+        # Original logic for 5 or more columns
+        drill_title = drill_title[~drill_title[4].isna()]
+        drill_names = drill_title.iloc[:,:4].apply(lambda row: ':'.join(row.values.astype(str)), axis=1)
+    
     unique_drills = list(set(drill_names))
     
     # Perform fuzzy matching to combine similar drill names
