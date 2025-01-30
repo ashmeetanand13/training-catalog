@@ -35,11 +35,17 @@ def get_drill_time(df):
 
 def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
+    # Find drill title column - check both naming conventions
+    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME']), None)
+    
+    if not drill_col:
+        raise ValueError("Could not find drill title column. Available columns: " + ", ".join(df.columns))
+    
     # Convert drill titles to uppercase
-    df['DRILL TITLE'] = df['DRILL TITLE'].str.upper()
+    df[drill_col] = df[drill_col].str.upper()
     
     # Split and process drill titles
-    drill_title = df['DRILL TITLE'].str.split(':', expand=True).iloc[:,:5]
+    drill_title = df[drill_col].str.split(':', expand=True).iloc[:,:5]
     drill_title = drill_title[~drill_title[4].isna()]
     
     # Join the first 4 columns and get unique drill names
@@ -71,7 +77,7 @@ def get_drill_names(df):
     
     # Apply the mapping to standardize drill names
     return drill_names.map(drill_mapping)
-
+    
 def get_target_metric(df, selected_drills, metrics, drill_times):
     # """Calculate metrics per minute for selected drills"""
     # Convert selected drills to uppercase for consistency
