@@ -184,7 +184,9 @@ if uploaded_file is not None:
             for idx, drill in enumerate(drill_names):
                 with cols[idx % 2]:
                     drill_time = st.slider(
-                        f'{drill.split(":")[1]}',
+                        parts = drill.split(":")
+                        drill_part = parts[1] if len(parts) > 1 else parts[0]
+                        f'{drill_part}'
                         2, 30, 2,
                         key=f"time_{idx}"
                     )
