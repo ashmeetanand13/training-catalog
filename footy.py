@@ -253,7 +253,9 @@ if uploaded_file is not None:
 
                         # Scatter plot for Acceleration vs Deceleration
                 # Add this import at the top with the other imports
-
+               # (place it where the current scatter plot code is, after the bar charts)
+                    if len(selected_metrics) >= 2:
+                        create_metric_scatter_plots(final_data, selected_metrics)
 # Add this function after the get_target_metric function
                         def create_metric_scatter_plots(final_data, selected_metrics):
                       
@@ -295,6 +297,4 @@ if uploaded_file is not None:
                                 st.write(f'Max {metric2}:', round(final_data[metric2].max()))
                     
                     # Replace the existing scatter plot sections with this single line
-                    # (place it where the current scatter plot code is, after the bar charts)
-                    if len(selected_metrics) >= 2:
-                        create_metric_scatter_plots(final_data, selected_metrics)
+     
