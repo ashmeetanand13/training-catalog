@@ -239,7 +239,7 @@ if uploaded_file is not None:
                         drill_times.append(drill_time)
                     
         # Calculate and display results
-        if len(drill_names) > 0:
+                if len(drill_names) > 0:
             final_data = get_target_metric(df_filtered, drill_names, selected_metrics, drill_times)
             
             if final_data.empty:
@@ -251,18 +251,49 @@ if uploaded_file is not None:
                 # Create visualizations
                 for metric in selected_metrics:
                     st.write(f"{metric} by Player")
+                    
+                    # Prepare data with rankings
+                    chart_data = final_data.reset_index().sort_values(metric, ascending=False)
+                    
+                    # Create a color column based on ranking
+                    chart_data['color'] = 'middle'  # Default color
+                    chart_data.loc[chart_data.head(3).index, 'color'] = 'top'  # Top 3
+                    chart_data.loc[chart_data.tail(3).index, 'color'] = 'bottom'  # Bottom 3
+                    
+                    # Create color scale
+                    color_scale = alt.Scale(
+                        domain=['top', 'middle', 'bottom'],
+                        range=['#2ecc71', '#95a5a6', '#e74c3c']  # Green for top, Gray for middle, Red for bottom
+                    )
+                    
+                    # Create the chart with colored bars
                     chart = alt.Chart(
-                        final_data.reset_index().sort_values(metric, ascending=False),
+                        chart_data,
                         height=400,
                         width=800
                     ).mark_bar().encode(
                         x=alt.X('PLAYER NAME', sort=None),
-                        y=metric
+                        y=metric,
+                        color=alt.Color('color:N', scale=color_scale, legend=None)
                     )
-                    st.altair_chart(chart)
-
-                            # Scatter plot for HID vs VHID    
-        if len(selected_metrics) >= 2:
-            create_metric_scatter_plots(final_data, selected_metrics)
-
+                    
+                    # Add value labels on top of bars
+                    text = chart.mark_text(
+                        align='center',
+                        baseline='bottom',
+                        dy=-5  # Adjust this value to control label position above bars
+                    ).encode(
+                        text=alt.Text(metric, format='.1f')
+                    )
+                    
+                    # Combine bar chart and labels
+                    final_chart = (chart + text)
+                    
+                    st.altair_chart(final_chart)
+        
                 
+                                    # Scatter plot for HID vs VHID    
+                if len(selected_metrics) >= 2:
+                    create_metric_scatter_plots(final_data, selected_metrics)
+        
+                        
