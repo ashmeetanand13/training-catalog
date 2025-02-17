@@ -252,34 +252,49 @@ if uploaded_file is not None:
 
 
                         # Scatter plot for Acceleration vs Deceleration
-                if 'ACCELERATIONS' in selected_metrics and 'DECELERATIONS' in selected_metrics:
-                    final_data_reset = final_data.reset_index()
-                    fig2 = px.scatter(
-                        final_data_reset,
-                        x='ACCELERATIONS',
-                        y='DECELERATIONS',
-                        color='PLAYER NAME',
-                        title='ACCELERATION vs DECELERATION by Player'
-                    )
+                # Add this import at the top with the other imports
+
+# Add this function after the get_target_metric function
+                        def create_metric_scatter_plots(final_data, selected_metrics):
+                        """
+                        Create scatter plots for all combinations of selected metrics
+                        """
+                        # Get all possible pairs of metrics
+                        metric_pairs = list(combinations(selected_metrics, 2))
+                        
+                        for metric1, metric2 in metric_pairs:
+                            final_data_reset = final_data.reset_index()
+                            fig = px.scatter(
+                                final_data_reset,
+                                x=metric1,
+                                y=metric2,
+                                color='PLAYER NAME',
+                                title=f'{metric1} vs {metric2} by Player'
+                            )
+                            
+                            # Add average lines
+                            fig.add_hline(
+                                y=final_data[metric2].mean(),
+                                line=dict(color='black', width=3)
+                            )
+                            fig.add_vline(
+                                x=final_data[metric1].mean(),
+                                line=dict(color='black', width=3)
+                            )
+                            
+                            st.plotly_chart(fig, use_container_width=True)
+                            
+                            # Display statistics
+                            st.write(f'{metric1} vs {metric2} Statistics')
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f'Average {metric1}:', round(final_data[metric1].mean()))
+                                st.write(f'Max {metric1}:', round(final_data[metric1].max()))
+                            with col2:
+                                st.write(f'Average {metric2}:', round(final_data[metric2].mean()))
+                                st.write(f'Max {metric2}:', round(final_data[metric2].max()))
                     
-                    # Add average lines
-                    fig2.add_hline(
-                        y=final_data['DECELERATIONS'].mean(),
-                        line=dict(color='black', width=3)
-                    )
-                    fig2.add_vline(
-                        x=final_data['ACCELERATIONS'].mean(),
-                        line=dict(color='black', width=3)
-                    )
-                    
-                    st.plotly_chart(fig2, use_container_width=True)
-                    
-                    # Display statistics
-                    st.write('ACCELERATION vs DECELERATION Statistics')
-                    col3, col4 = st.columns(2)
-                    with col3:
-                        st.write('Average ACCELERATION:', round(final_data['ACCELERATIONS'].mean()))
-                        st.write('Max ACCELERATION:', round(final_data['ACCELERATIONS'].max()))
-                    with col4:
-                        st.write('Average DECELERATION:', round(final_data['DECELERATIONS'].mean()))
-                        st.write('Max DECELERATION:', round(final_data['DECELERATIONS'].max()))
+                    # Replace the existing scatter plot sections with this single line
+                    # (place it where the current scatter plot code is, after the bar charts)
+                    if len(selected_metrics) >= 2:
+                        create_metric_scatter_plots(final_data, selected_metrics)
