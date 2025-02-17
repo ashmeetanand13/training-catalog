@@ -256,9 +256,9 @@ if uploaded_file is not None:
 
 # Add this function after the get_target_metric function
                         def create_metric_scatter_plots(final_data, selected_metrics):
-                        """
-                        Create scatter plots for all combinations of selected metrics
-                        """
+                      
+                        #Create scatter plots for all combinations of selected metrics
+                    
                         # Get all possible pairs of metrics
                         metric_pairs = list(combinations(selected_metrics, 2))
                         
