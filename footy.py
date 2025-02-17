@@ -239,7 +239,7 @@ if uploaded_file is not None:
                         drill_times.append(drill_time)
                     
         # Calculate and display results
-                if len(drill_names) > 0:
+if len(drill_names) > 0:
     final_data = get_target_metric(df_filtered, drill_names, selected_metrics, drill_times)
     
     if final_data.empty:
@@ -294,7 +294,7 @@ if uploaded_file is not None:
         
                 
                                     # Scatter plot for HID vs VHID    
-                if len(selected_metrics) >= 2:
-                    create_metric_scatter_plots(final_data, selected_metrics)
+    if len(selected_metrics) >= 2:
+        create_metric_scatter_plots(final_data, selected_metrics)
         
                         
