@@ -260,42 +260,9 @@ if uploaded_file is not None:
                         y=metric
                     )
                     st.altair_chart(chart)
+
+                            # Scatter plot for HID vs VHID    
+        if len(selected_metrics) >= 2:
+            create_metric_scatter_plots(final_data, selected_metrics)
+
                 
-                # Scatter plot for HID vs VHID
-                if 'HIGH SPEED RUNNING ABSOLUTE' in selected_metrics and 'DISTANCE Z6 ABSOLUTE' in selected_metrics:
-                    final_data_reset = final_data.reset_index()
-                    fig = px.scatter(
-                        final_data_reset,
-                        x='HIGH SPEED RUNNING ABSOLUTE',
-                        y='DISTANCE Z6 ABSOLUTE',
-                        color='PLAYER NAME',
-                        title='HID vs VHID by Player'
-                    )
-                    
-                    # Add average lines
-                    fig.add_hline(
-                        y=final_data['DISTANCE Z6 ABSOLUTE'].mean(),
-                        line=dict(color='black', width=3)
-                    )
-                    fig.add_vline(
-                        x=final_data['HIGH SPEED RUNNING ABSOLUTE'].mean(),
-                        line=dict(color='black', width=3)
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Display statistics
-                    st.write('HID vs VHID Statistics')
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write('Average HID:', round(final_data['HIGH SPEED RUNNING ABSOLUTE'].mean()))
-                        st.write('Max HID:', round(final_data['HIGH SPEED RUNNING ABSOLUTE'].max()))
-                    with col2:
-                        st.write('Average VHID:', round(final_data['DISTANCE Z6 ABSOLUTE'].mean()))
-                        st.write('Max VHID:', round(final_data['DISTANCE Z6 ABSOLUTE'].max()))
-
-
-                    if len(selected_metrics) >= 2:
-                        create_metric_scatter_plots(final_data, selected_metrics)
-
-                        
