@@ -118,6 +118,50 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
     
     return pd.DataFrame()
 
+# Add this import at the top with the other imports
+from itertools import combinations
+
+# Add this function after the get_target_metric function
+def create_metric_scatter_plots(final_data, selected_metrics):
+    """
+    Create scatter plots for all combinations of selected metrics
+    """
+    # Get all possible pairs of metrics
+    metric_pairs = list(combinations(selected_metrics, 2))
+    
+    for metric1, metric2 in metric_pairs:
+        final_data_reset = final_data.reset_index()
+        fig = px.scatter(
+            final_data_reset,
+            x=metric1,
+            y=metric2,
+            color='PLAYER NAME',
+            title=f'{metric1} vs {metric2} by Player'
+        )
+        
+        # Add average lines
+        fig.add_hline(
+            y=final_data[metric2].mean(),
+            line=dict(color='black', width=3)
+        )
+        fig.add_vline(
+            x=final_data[metric1].mean(),
+            line=dict(color='black', width=3)
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Display statistics
+        st.write(f'{metric1} vs {metric2} Statistics')
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f'Average {metric1}:', round(final_data[metric1].mean()))
+            st.write(f'Max {metric1}:', round(final_data[metric1].max()))
+        with col2:
+            st.write(f'Average {metric2}:', round(final_data[metric2].mean()))
+            st.write(f'Max {metric2}:', round(final_data[metric2].max()))
+
+
 # Streamlit UI
 st.title('Soccer Pre-Training Analysis')
 
@@ -251,50 +295,7 @@ if uploaded_file is not None:
                         st.write('Max VHID:', round(final_data['DISTANCE Z6 ABSOLUTE'].max()))
 
 
-                        # Scatter plot for Acceleration vs Deceleration
-                # Add this import at the top with the other imports
-               # (place it where the current scatter plot code is, after the bar charts)
                     if len(selected_metrics) >= 2:
                         create_metric_scatter_plots(final_data, selected_metrics)
-# Add this function after the get_target_metric function
-                        def create_metric_scatter_plots(final_data, selected_metrics):
-                      
-                        #Create scatter plots for all combinations of selected metrics
-                    
-                        # Get all possible pairs of metrics
-                        metric_pairs = list(combinations(selected_metrics, 2))
+
                         
-                        for metric1, metric2 in metric_pairs:
-                            final_data_reset = final_data.reset_index()
-                            fig = px.scatter(
-                                final_data_reset,
-                                x=metric1,
-                                y=metric2,
-                                color='PLAYER NAME',
-                                title=f'{metric1} vs {metric2} by Player'
-                            )
-                            
-                            # Add average lines
-                            fig.add_hline(
-                                y=final_data[metric2].mean(),
-                                line=dict(color='black', width=3)
-                            )
-                            fig.add_vline(
-                                x=final_data[metric1].mean(),
-                                line=dict(color='black', width=3)
-                            )
-                            
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # Display statistics
-                            st.write(f'{metric1} vs {metric2} Statistics')
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.write(f'Average {metric1}:', round(final_data[metric1].mean()))
-                                st.write(f'Max {metric1}:', round(final_data[metric1].max()))
-                            with col2:
-                                st.write(f'Average {metric2}:', round(final_data[metric2].mean()))
-                                st.write(f'Max {metric2}:', round(final_data[metric2].max()))
-                    
-                    # Replace the existing scatter plot sections with this single line
-     
