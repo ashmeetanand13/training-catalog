@@ -5,7 +5,6 @@ import plotly.express as px
 import altair as alt
 from itertools import combinations
 from tqdm import tqdm
-import pandas as pd
 from thefuzz import fuzz
 from thefuzz import process
 
@@ -19,7 +18,7 @@ def get_data_info(file):
     all_columns = df.columns.tolist()
     player_names = df['PLAYER NAME'].unique().tolist()
     return df, all_columns, player_names
-    
+
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
@@ -31,7 +30,7 @@ def get_drill_time(df):
     
     df['start time'] = pd.to_datetime(df[start_col])
     df['end time'] = pd.to_datetime(df[end_col])
-    return (df['end time'] - df['start time']).dt.total_seconds()/60
+    return (df['end time'] - df['start time']).dt.total_seconds() / 60
 
 def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
@@ -52,11 +51,15 @@ def get_drill_names(df):
     
     if num_cols < 5:
         # If we have fewer than 5 columns, just use all available columns
-        drill_names = drill_title.iloc[:,:num_cols].apply(lambda row: ':'.join(row.dropna().values.astype(str)), axis=1)
+        drill_names = drill_title.iloc[:, :num_cols].apply(
+            lambda row: ':'.join(row.dropna().values.astype(str)), axis=1
+        )
     else:
         # Original logic for 5 or more columns
         drill_title = drill_title[~drill_title[4].isna()]
-        drill_names = drill_title.iloc[:,:4].apply(lambda row: ':'.join(row.values.astype(str)), axis=1)
+        drill_names = drill_title.iloc[:, :4].apply(
+            lambda row: ':'.join(row.values.astype(str)), axis=1
+        )
     
     unique_drills = list(set(drill_names))
     
@@ -85,9 +88,9 @@ def get_drill_names(df):
     
     # Apply the mapping to standardize drill names
     return drill_names.map(drill_mapping)
-    
+
 def get_target_metric(df, selected_drills, metrics, drill_times):
-    # """Calculate metrics per minute for selected drills"""
+    """Calculate metrics per minute for selected drills"""
     # Convert selected drills to uppercase for consistency
     selected_drills = [drill.upper() for drill in selected_drills]
     
@@ -98,7 +101,7 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
         
         if drill_data.empty:
             continue
-            
+        
         for player in drill_data['PLAYER NAME'].unique():
             player_data = drill_data[drill_data['PLAYER NAME'] == player]
             player_metrics = {
@@ -118,14 +121,8 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
     
     return pd.DataFrame()
 
-# Add this import at the top with the other imports
-from itertools import combinations
-
-# Add this function after the get_target_metric function
 def create_metric_scatter_plots(final_data, selected_metrics):
-    """
-    Create scatter plots for all combinations of selected metrics
-    """
+    """Create scatter plots for all combinations of selected metrics"""
     # Get all possible pairs of metrics
     metric_pairs = list(combinations(selected_metrics, 2))
     
@@ -161,7 +158,6 @@ def create_metric_scatter_plots(final_data, selected_metrics):
             st.write(f'Average {metric2}:', round(final_data[metric2].mean()))
             st.write(f'Max {metric2}:', round(final_data[metric2].max()))
 
-
 # Streamlit UI
 st.title('Soccer Pre-Training Analysis')
 
@@ -177,8 +173,13 @@ if uploaded_file is not None:
     st.write(columns)
     
     # Select metrics
-    default_metrics = ["TOTAL DISTANCE", "HIGH SPEED RUNNING ABSOLUTE", "DISTANCE Z6 ABSOLUTE", 
-                      "ACCELERATIONS", "DECELERATIONS"]
+    default_metrics = [
+        "TOTAL DISTANCE",
+        "HIGH SPEED RUNNING ABSOLUTE",
+        "DISTANCE Z6 ABSOLUTE",
+        "ACCELERATIONS",
+        "DECELERATIONS"
+    ]
     selected_metrics = st.multiselect(
         "Select metrics to analyze",
         columns,
@@ -210,91 +211,101 @@ if uploaded_file is not None:
                 .apply(lambda x: set(x) == set(selected_players))
                 .reset_index()
             )
-            valid_drills = drills_with_all_players[drills_with_all_players['PLAYER NAME'] == True]['Drill title 2']
+            valid_drills = drills_with_all_players[
+                drills_with_all_players['PLAYER NAME'] == True
+            ]['Drill title 2']
             drill_names = st.sidebar.multiselect(
-                "Select Drill", valid_drills, [], disabled=False
+                "Select Drill",
+                valid_drills,
+                [],
+                disabled=False
             )
         else:
             drills = get_drill_names(df_filtered)
             drill_names = st.sidebar.multiselect(
-                "Select Drill", drills.unique(), [], disabled=False
+                "Select Drill",
+                drills.unique(),
+                [],
+                disabled=False
             )
         
         # Set drill durations
-            drill_times = []
-            if drill_names:
-                st.subheader("Set Duration for Each Drill (minutes)")
-                cols = st.columns(min(2, len(drill_names)))
-                for idx, drill in enumerate(drill_names):
-                    with cols[idx % 2]:
-                        parts = drill.split(":")
-                        drill_part = parts[1] if len(parts) > 1 else parts[0]
-                        drill_time = st.slider(
-                            label=f'{drill_part}',
-                            min_value=2,
-                            max_value=30,
-                            value=2,
-                            key=f"time_{idx}"
-                        )
-                        drill_times.append(drill_time)
-                    
-        # Calculate and display results
-if len(drill_names) > 0:
-    final_data = get_target_metric(df_filtered, drill_names, selected_metrics, drill_times)
-    
-    if final_data.empty:
-        st.write("No data found for selected drills")
-    else:
-        st.subheader("Analysis Results")
-        st.table(final_data)
-        
-        # Create visualizations
-        for metric in selected_metrics:
-            st.write(f"{metric} by Player")
+        drill_times = []
+        if drill_names:
+            st.subheader("Set Duration for Each Drill (minutes)")
+            cols = st.columns(min(2, len(drill_names)))
+            for idx, drill in enumerate(drill_names):
+                with cols[idx % 2]:
+                    parts = drill.split(":")
+                    drill_part = parts[1] if len(parts) > 1 else parts[0]
+                    drill_time = st.slider(
+                        label=f'{drill_part}',
+                        min_value=2,
+                        max_value=30,
+                        value=2,
+                        key=f"time_{idx}"
+                    )
+                    drill_times.append(drill_time)
             
-            # Prepare data with rankings
-            chart_data = final_data.reset_index().sort_values(metric, ascending=False)
-            
-            # Create a color column based on ranking
-            chart_data['color'] = 'middle'  # Default color
-            chart_data.loc[chart_data.head(3).index, 'color'] = 'top'  # Top 3
-            chart_data.loc[chart_data.tail(3).index, 'color'] = 'bottom'  # Bottom 3
-            
-            # Create the chart with colored bars
-            chart = alt.Chart(
-                chart_data,
-                height=400,
-                width=800
-            ).mark_bar().encode(
-                x=alt.X('PLAYER NAME', sort=None),
-                y=metric,
-                color=alt.Color(
-                    'color:N',
-                    scale=alt.Scale(
-                        domain=['top', 'middle', 'bottom'],
-                        range=['green', 'gray', 'red']
-                    ),
-                    legend=None
+            # Calculate and display results
+            if len(drill_names) > 0:
+                final_data = get_target_metric(
+                    df_filtered,
+                    drill_names,
+                    selected_metrics,
+                    drill_times
                 )
-            )
-            
-            # Add value labels on top of bars
-            text = chart.mark_text(
-                align='center',
-                baseline='bottom',
-                dy=-5  # Adjust this value to control label position above bars
-            ).encode(
-                text=alt.Text(metric, format='.1f')
-            )
-            
-            # Combine bar chart and labels
-            final_chart = (chart + text)
-            
-            st.altair_chart(final_chart)
-        
                 
-                                    # Scatter plot for HID vs VHID    
-    if len(selected_metrics) >= 2:
-        create_metric_scatter_plots(final_data, selected_metrics)
-        
+                if final_data.empty:
+                    st.write("No data found for selected drills")
+                else:
+                    st.subheader("Analysis Results")
+                    st.table(final_data)
+                    
+                    # Create visualizations
+                    for metric in selected_metrics:
+                        st.write(f"{metric} by Player")
                         
+                        # Prepare data with rankings
+                        chart_data = final_data.reset_index().sort_values(metric, ascending=False)
+                        
+                        # Create a color column based on ranking
+                        chart_data['color'] = 'middle'  # Default color
+                        chart_data.loc[chart_data.head(3).index, 'color'] = 'top'  # Top 3
+                        chart_data.loc[chart_data.tail(3).index, 'color'] = 'bottom'  # Bottom 3
+                        
+                        # Create the chart with colored bars
+                        chart = alt.Chart(
+                            chart_data,
+                            height=400,
+                            width=800
+                        ).mark_bar().encode(
+                            x=alt.X('PLAYER NAME', sort=None),
+                            y=metric,
+                            color=alt.Color(
+                                'color:N',
+                                scale=alt.Scale(
+                                    domain=['top', 'middle', 'bottom'],
+                                    range=['green', 'gray', 'red']
+                                ),
+                                legend=None
+                            )
+                        )
+                        
+                        # Add value labels on top of bars
+                        text = chart.mark_text(
+                            align='center',
+                            baseline='bottom',
+                            dy=-5  # Adjust this value to control label position above bars
+                        ).encode(
+                            text=alt.Text(metric, format='.1f')
+                        )
+                        
+                        # Combine bar chart and labels
+                        final_chart = (chart + text)
+                        
+                        st.altair_chart(final_chart)
+                    
+                    # Scatter plot for metrics
+                    if len(selected_metrics) >= 2:
+                        create_metric_scatter_plots(final_data, selected_metrics)
