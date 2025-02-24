@@ -46,7 +46,7 @@ def get_drill_time(df):
 def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
     # Find drill title column - check both naming conventions
-    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME']), None)
+    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME', 'SPLIT NAME']), None)
     
     if not drill_col:
         raise ValueError("Could not find drill title column. Available columns: " + ", ".join(df.columns))
