@@ -28,8 +28,19 @@ def get_drill_time(df):
     if not start_col or not end_col:
         raise ValueError("Could not find start/end time columns")
     
-    df['start time'] = pd.to_datetime(df[start_col])
-    df['end time'] = pd.to_datetime(df[end_col])
+    # Check the format of time values
+    sample_start = str(df[start_col].iloc[0])
+    
+    # Handle Excel serial date numbers (like 45708.798)
+    if sample_start.replace('.', '', 1).isdigit():
+        # Convert Excel serial numbers to datetime
+        df['start time'] = pd.TimedeltaIndex(df[start_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
+        df['end time'] = pd.TimedeltaIndex(df[end_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
+    else:
+        # Regular datetime parsing for time strings (like '9:43:15')
+        df['start time'] = pd.to_datetime(df[start_col])
+        df['end time'] = pd.to_datetime(df[end_col])
+    
     return (df['end time'] - df['start time']).dt.total_seconds() / 60
 
 def get_drill_names(df):
