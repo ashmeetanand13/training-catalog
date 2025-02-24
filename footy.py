@@ -22,8 +22,8 @@ def get_data_info(file):
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME','Split Start Time']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME','Split End Time']), None)
     
     if not start_col or not end_col:
         raise ValueError("Could not find start/end time columns")
