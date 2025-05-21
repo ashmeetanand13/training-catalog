@@ -7,98 +7,215 @@ from itertools import combinations
 from tqdm import tqdm
 from thefuzz import fuzz
 from thefuzz import process
+import chardet
+
+def detect_encoding(file):
+    """Detect the encoding of a file"""
+    if isinstance(file, str):
+        # File path
+        with open(file, 'rb') as f:
+            raw_data = f.read(10000)
+    else:
+        # File-like object (Streamlit uploader)
+        file.seek(0)
+        raw_data = file.read(10000)
+        file.seek(0)
+    
+    result = chardet.detect(raw_data)
+    return result['encoding'], result['confidence']
 
 def get_data_info(file):
     """
     Read file and return all column names and unique player names.
     Works with both uploaded files and file paths.
+    Handles various encoding issues robustly.
     """
-    df = pd.read_csv(file)
-    df.columns = df.columns.str.upper()  # This line makes all columns uppercase
+    
+    # List of common encodings to try in order of preference
+    encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
+    
+    # Try to detect encoding first
+    try:
+        detected_encoding, confidence = detect_encoding(file)
+        if detected_encoding and confidence > 0.7:
+            encodings_to_try.insert(0, detected_encoding)
+            st.info(f"Detected encoding: {detected_encoding} (confidence: {confidence:.2f})")
+    except Exception as e:
+        st.warning(f"Could not detect encoding automatically: {str(e)}")
+    
+    df = None
+    successful_encoding = None
+    
+    for encoding in encodings_to_try:
+        try:
+            # Reset file pointer if it's a file-like object
+            if hasattr(file, 'seek'):
+                file.seek(0)
+            
+            df = pd.read_csv(file, encoding=encoding)
+            successful_encoding = encoding
+            st.success(f"Successfully read file with encoding: {encoding}")
+            break
+            
+        except UnicodeDecodeError:
+            continue
+        except Exception as e:
+            if "codec can't decode" in str(e).lower():
+                continue
+            else:
+                # Other non-encoding related errors
+                st.error(f"Error reading file with {encoding}: {str(e)}")
+                continue
+    
+    # If all encodings failed, try with error handling
+    if df is None:
+        try:
+            if hasattr(file, 'seek'):
+                file.seek(0)
+            df = pd.read_csv(file, encoding='utf-8', errors='replace')
+            st.warning("Read file with UTF-8 and character replacement - some characters may appear as �")
+        except Exception as e:
+            try:
+                if hasattr(file, 'seek'):
+                    file.seek(0)
+                df = pd.read_csv(file, encoding='latin-1', errors='ignore')
+                st.warning("Read file with Latin-1 and error ignoring - some characters may be missing")
+            except Exception as e:
+                st.error(f"Could not read the file with any encoding method. Error: {str(e)}")
+                return None, [], []
+    
+    if df is None or df.empty:
+        st.error("Failed to read the CSV file or file is empty")
+        return None, [], []
+    
+    # Clean up any potential encoding artifacts in column names
+    df.columns = df.columns.str.strip()  # Remove leading/trailing whitespace
+    df.columns = df.columns.str.replace('\ufeff', '')  # Remove BOM if present
+    df.columns = df.columns.str.replace('\x00', '')  # Remove null characters
+    df.columns = df.columns.str.upper()  # Make all columns uppercase
+    
     all_columns = df.columns.tolist()
-    player_names = df['PLAYER NAME'].unique().tolist()
+    
+    # Find the player name column (handle various possible names)
+    player_col = None
+    possible_player_cols = ['PLAYER NAME', 'PLAYER', 'NAME', 'PLAYERNAME', 'PLAYER_NAME']
+    
+    for col in possible_player_cols:
+        if col in df.columns:
+            player_col = col
+            break
+    
+    if player_col is None:
+        st.error(f"Could not find player name column. Available columns: {', '.join(all_columns)}")
+        st.write("Please ensure your CSV has a column named one of: " + ", ".join(possible_player_cols))
+        return df, all_columns, []
+    
+    # Clean player names and get unique values
+    df[player_col] = df[player_col].astype(str).str.strip()
+    df[player_col] = df[player_col].str.replace('\x00', '')  # Remove null characters
+    player_names = df[player_col].unique().tolist()
+    
+    # Remove empty or invalid player names
+    player_names = [name for name in player_names if name and name != 'nan' and name.strip()]
+    
     return df, all_columns, player_names
 
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME','SPLIT START TIME','Start Time']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME','SPLIT END TIME','End Time']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME','SPLIT START TIME']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME','SPLIT END TIME']), None)
     
     if not start_col or not end_col:
+        st.error("Could not find start/end time columns")
+        st.write("Available columns:", df.columns.tolist())
         raise ValueError("Could not find start/end time columns")
     
-    # Check the format of time values
-    sample_start = str(df[start_col].iloc[0])
+    try:
+        # Check the format of time values
+        sample_start = str(df[start_col].iloc[0])
+        
+        # Handle Excel serial date numbers (like 45708.798)
+        if sample_start.replace('.', '', 1).isdigit():
+            # Convert Excel serial numbers to datetime
+            df['start time'] = pd.TimedeltaIndex(df[start_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
+            df['end time'] = pd.TimedeltaIndex(df[end_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
+        else:
+            # Regular datetime parsing for time strings (like '9:43:15')
+            df['start time'] = pd.to_datetime(df[start_col])
+            df['end time'] = pd.to_datetime(df[end_col])
+        
+        return (df['end time'] - df['start time']).dt.total_seconds() / 60
     
-    # Handle Excel serial date numbers (like 45708.798)
-    if sample_start.replace('.', '', 1).isdigit():
-        # Convert Excel serial numbers to datetime
-        df['start time'] = pd.TimedeltaIndex(df[start_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
-        df['end time'] = pd.TimedeltaIndex(df[end_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
-    else:
-        # Regular datetime parsing for time strings (like '9:43:15')
-        df['start time'] = pd.to_datetime(df[start_col])
-        df['end time'] = pd.to_datetime(df[end_col])
-    
-    return (df['end time'] - df['start time']).dt.total_seconds() / 60
+    except Exception as e:
+        st.error(f"Error processing time columns: {str(e)}")
+        st.write("Sample start time value:", sample_start)
+        raise
 
 def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
     # Find drill title column - check both naming conventions
-    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME', 'SPLIT NAME','Period Name']), None)
+    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME', 'SPLIT NAME']), None)
     
     if not drill_col:
+        st.error("Could not find drill title column")
+        st.write("Available columns:", df.columns.tolist())
         raise ValueError("Could not find drill title column. Available columns: " + ", ".join(df.columns))
     
-    # Convert drill titles to uppercase
-    df[drill_col] = df[drill_col].str.upper()
+    try:
+        # Convert drill titles to uppercase and clean them
+        df[drill_col] = df[drill_col].astype(str).str.upper().str.strip()
+        df[drill_col] = df[drill_col].str.replace('\x00', '')  # Remove null characters
+        
+        # Split and process drill titles
+        drill_title = df[drill_col].str.split(':', expand=True)
+        
+        # Check how many columns we actually got after splitting
+        num_cols = len(drill_title.columns)
+        
+        if num_cols < 5:
+            # If we have fewer than 5 columns, just use all available columns
+            drill_names = drill_title.iloc[:, :num_cols].apply(
+                lambda row: ':'.join(row.dropna().values.astype(str)), axis=1
+            )
+        else:
+            # Original logic for 5 or more columns
+            drill_title = drill_title[~drill_title[4].isna()]
+            drill_names = drill_title.iloc[:, :4].apply(
+                lambda row: ':'.join(row.values.astype(str)), axis=1
+            )
+        
+        unique_drills = list(set(drill_names))
+        
+        # Perform fuzzy matching to combine similar drill names
+        final_drills = []
+        processed_drills = set()
+        
+        for drill in unique_drills:
+            if drill not in processed_drills:
+                # Find all similar drills with 96% or higher similarity
+                matches = process.extract(drill, unique_drills, scorer=fuzz.ratio, limit=None)
+                similar_drills = [match[0] for match in matches if match[1] >= 96]
+                
+                # Add all similar drills to processed set
+                processed_drills.update(similar_drills)
+                
+                # Use the first occurrence as the standardized name
+                if similar_drills:
+                    final_drills.append(similar_drills[0])
+        
+        # Create a mapping dictionary for similar drills
+        drill_mapping = {}
+        for drill in unique_drills:
+            best_match = process.extractOne(drill, final_drills, scorer=fuzz.ratio)
+            drill_mapping[drill] = best_match[0]
+        
+        # Apply the mapping to standardize drill names
+        return drill_names.map(drill_mapping)
     
-    # Split and process drill titles
-    drill_title = df[drill_col].str.split(':', expand=True)
-    
-    # Check how many columns we actually got after splitting
-    num_cols = len(drill_title.columns)
-    
-    if num_cols < 5:
-        # If we have fewer than 5 columns, just use all available columns
-        drill_names = drill_title.iloc[:, :num_cols].apply(
-            lambda row: ':'.join(row.dropna().values.astype(str)), axis=1
-        )
-    else:
-        # Original logic for 5 or more columns
-        drill_title = drill_title[~drill_title[4].isna()]
-        drill_names = drill_title.iloc[:, :4].apply(
-            lambda row: ':'.join(row.values.astype(str)), axis=1
-        )
-    
-    unique_drills = list(set(drill_names))
-    
-    # Perform fuzzy matching to combine similar drill names
-    final_drills = []
-    processed_drills = set()
-    
-    for drill in unique_drills:
-        if drill not in processed_drills:
-            # Find all similar drills with 96% or higher similarity
-            matches = process.extract(drill, unique_drills, scorer=fuzz.ratio, limit=None)
-            similar_drills = [match[0] for match in matches if match[1] >= 96]
-            
-            # Add all similar drills to processed set
-            processed_drills.update(similar_drills)
-            
-            # Use the first occurrence as the standardized name
-            if similar_drills:
-                final_drills.append(similar_drills[0])
-    
-    # Create a mapping dictionary for similar drills
-    drill_mapping = {}
-    for drill in unique_drills:
-        best_match = process.extractOne(drill, final_drills, scorer=fuzz.ratio)
-        drill_mapping[drill] = best_match[0]
-    
-    # Apply the mapping to standardize drill names
-    return drill_names.map(drill_mapping)
+    except Exception as e:
+        st.error(f"Error processing drill names: {str(e)}")
+        raise
 
 def get_target_metric(df, selected_drills, metrics, drill_times):
     """Calculate metrics per minute for selected drills"""
@@ -107,111 +224,163 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
     
     results = []
     
-    for drill, time_multiplier in zip(selected_drills, drill_times):
-        drill_data = df[df['Drill title 2'].str.upper() == drill]
-        
-        if drill_data.empty:
-            continue
-        
-        for player in drill_data['PLAYER NAME'].unique():
-            player_data = drill_data[drill_data['PLAYER NAME'] == player]
-            player_metrics = {
-                "PLAYER NAME": player,
-            }
+    try:
+        for drill, time_multiplier in zip(selected_drills, drill_times):
+            drill_data = df[df['Drill title 2'].str.upper() == drill]
             
-            for metric in metrics:
-                if metric in player_data.columns:
-                    per_minute = player_data[metric].mean() / player_data['time'].mean()
-                    player_metrics[metric] = per_minute * time_multiplier
+            if drill_data.empty:
+                continue
             
-            results.append(player_metrics)
+            for player in drill_data['PLAYER NAME'].unique():
+                player_data = drill_data[drill_data['PLAYER NAME'] == player]
+                player_metrics = {
+                    "PLAYER NAME": player,
+                }
+                
+                for metric in metrics:
+                    if metric in player_data.columns:
+                        # Handle potential NaN values
+                        metric_values = player_data[metric].dropna()
+                        time_values = player_data['time'].dropna()
+                        
+                        if len(metric_values) > 0 and len(time_values) > 0:
+                            per_minute = metric_values.mean() / time_values.mean()
+                            player_metrics[metric] = per_minute * time_multiplier
+                        else:
+                            player_metrics[metric] = 0
+                
+                results.append(player_metrics)
+        
+        if results:
+            final_df = pd.DataFrame(results)
+            return final_df.groupby(['PLAYER NAME']).sum()
+        
+        return pd.DataFrame()
     
-    if results:
-        final_df = pd.DataFrame(results)
-        return final_df.groupby(['PLAYER NAME']).sum()
-    
-    return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error calculating target metrics: {str(e)}")
+        return pd.DataFrame()
 
 def create_metric_scatter_plots(final_data, selected_metrics):
     """Create scatter plots for all combinations of selected metrics"""
-    # Get all possible pairs of metrics
-    metric_pairs = list(combinations(selected_metrics, 2))
+    try:
+        # Get all possible pairs of metrics
+        metric_pairs = list(combinations(selected_metrics, 2))
+        
+        for metric1, metric2 in metric_pairs:
+            final_data_reset = final_data.reset_index()
+            fig = px.scatter(
+                final_data_reset,
+                x=metric1,
+                y=metric2,
+                color='PLAYER NAME',
+                title=f'{metric1} vs {metric2} by Player'
+            )
+            
+            # Add average lines
+            fig.add_hline(
+                y=final_data[metric2].mean(),
+                line=dict(color='black', width=3)
+            )
+            fig.add_vline(
+                x=final_data[metric1].mean(),
+                line=dict(color='black', width=3)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Display statistics
+            st.write(f'{metric1} vs {metric2} Statistics')
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f'Average {metric1}:', round(final_data[metric1].mean(), 2))
+                st.write(f'Max {metric1}:', round(final_data[metric1].max(), 2))
+            with col2:
+                st.write(f'Average {metric2}:', round(final_data[metric2].mean(), 2))
+                st.write(f'Max {metric2}:', round(final_data[metric2].max(), 2))
     
-    for metric1, metric2 in metric_pairs:
-        final_data_reset = final_data.reset_index()
-        fig = px.scatter(
-            final_data_reset,
-            x=metric1,
-            y=metric2,
-            color='PLAYER NAME',
-            title=f'{metric1} vs {metric2} by Player'
-        )
-        
-        # Add average lines
-        fig.add_hline(
-            y=final_data[metric2].mean(),
-            line=dict(color='black', width=3)
-        )
-        fig.add_vline(
-            x=final_data[metric1].mean(),
-            line=dict(color='black', width=3)
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Display statistics
-        st.write(f'{metric1} vs {metric2} Statistics')
-        col1, col2 = st.columns(2)
-        with col1:
-            st.write(f'Average {metric1}:', round(final_data[metric1].mean()))
-            st.write(f'Max {metric1}:', round(final_data[metric1].max()))
-        with col2:
-            st.write(f'Average {metric2}:', round(final_data[metric2].mean()))
-            st.write(f'Max {metric2}:', round(final_data[metric2].max()))
+    except Exception as e:
+        st.error(f"Error creating scatter plots: {str(e)}")
 
 # Streamlit UI
 st.title('Soccer Pre-Training Analysis')
+st.write("Upload your GPS data file (CSV format) to analyze player performance metrics.")
 
 # File upload
-uploaded_file = st.file_uploader("Upload GPS file", type=['gps', 'csv'])
+uploaded_file = st.file_uploader("Upload GPS file", type=['csv', 'gps'], help="Supports CSV files with various encodings")
 
 if uploaded_file is not None:
-    # Load data
-    df, columns, player_names = get_data_info(uploaded_file)
-    
-    # Display columns
-    st.subheader("Available Columns")
-    st.write(columns)
-    
-    # Select metrics
-    default_metrics = [
-        "TOTAL DISTANCE",
-        "HIGH SPEED RUNNING ABSOLUTE",
-        "DISTANCE Z6 ABSOLUTE",
-        "ACCELERATIONS",
-        "DECELERATIONS"
-    ]
-    selected_metrics = st.multiselect(
-        "Select metrics to analyze",
-        columns,
-        default=[metric for metric in default_metrics if metric in columns]
-    )
-    
-    # Select players
-    selected_players = st.multiselect(
-        "Select players to analyze",
-        player_names
-    )
-    
-    if selected_players:
+    try:
+        # Load data
+        df, columns, player_names = get_data_info(uploaded_file)
+        
+        if df is None:
+            st.stop()
+        
+        # Display file info
+        st.success(f"File loaded successfully! Found {len(df)} rows and {len(columns)} columns.")
+        
+        # Display columns in an expandable section
+        with st.expander("Available Columns"):
+            st.write(columns)
+        
+        # Select metrics
+        default_metrics = [
+            "TOTAL DISTANCE",
+            "HIGH SPEED RUNNING ABSOLUTE",
+            "DISTANCE Z6 ABSOLUTE",
+            "ACCELERATIONS",
+            "DECELERATIONS"
+        ]
+        
+        available_defaults = [metric for metric in default_metrics if metric in columns]
+        
+        selected_metrics = st.multiselect(
+            "Select metrics to analyze",
+            columns,
+            default=available_defaults,
+            help="Choose the performance metrics you want to analyze"
+        )
+        
+        if not selected_metrics:
+            st.warning("Please select at least one metric to analyze.")
+            st.stop()
+        
+        # Select players
+        if not player_names:
+            st.error("No player names found in the data.")
+            st.stop()
+            
+        selected_players = st.multiselect(
+            "Select players to analyze",
+            player_names,
+            help="Choose which players to include in the analysis"
+        )
+        
+        if not selected_players:
+            st.warning("Please select at least one player to analyze.")
+            st.stop()
+        
         # Filter data for selected players
         df_filtered = df[df['PLAYER NAME'].isin(selected_players)]
         
+        if df_filtered.empty:
+            st.error("No data found for selected players.")
+            st.stop()
+        
         # Calculate drill times
-        df_filtered['time'] = get_drill_time(df_filtered)
+        try:
+            df_filtered['time'] = get_drill_time(df_filtered)
+        except Exception as e:
+            st.error(f"Could not calculate drill times: {str(e)}")
+            st.stop()
         
         # Process drill names
-        df_filtered['Drill title 2'] = get_drill_names(df_filtered)
+        try:
+            df_filtered['Drill title 2'] = get_drill_names(df_filtered)
+        except Exception as e:
+            st.error(f"Could not process drill names: {str(e)}")
+            st.stop()
         
         # Select drills
         force_check = st.sidebar.checkbox("Show only drills with all selected players")
@@ -225,6 +394,11 @@ if uploaded_file is not None:
             valid_drills = drills_with_all_players[
                 drills_with_all_players['PLAYER NAME'] == True
             ]['Drill title 2']
+            
+            if len(valid_drills) == 0:
+                st.warning("No drills found with all selected players. Try unchecking the filter.")
+                st.stop()
+                
             drill_names = st.sidebar.multiselect(
                 "Select Drill",
                 valid_drills,
@@ -233,9 +407,11 @@ if uploaded_file is not None:
             )
         else:
             drills = get_drill_names(df_filtered)
+            unique_drills = drills.unique()
+            
             drill_names = st.sidebar.multiselect(
                 "Select Drill",
-                drills.unique(),
+                unique_drills,
                 [],
                 disabled=False
             )
@@ -271,52 +447,77 @@ if uploaded_file is not None:
                     st.write("No data found for selected drills")
                 else:
                     st.subheader("Analysis Results")
-                    st.table(final_data)
+                    st.dataframe(final_data, use_container_width=True)
                     
                     # Create visualizations
                     for metric in selected_metrics:
-                        st.write(f"{metric} by Player")
-                        
-                        # Prepare data with rankings
-                        chart_data = final_data.reset_index().sort_values(metric, ascending=False)
-                        
-                        # Create a color column based on ranking
-                        chart_data['color'] = 'middle'  # Default color
-                        chart_data.loc[chart_data.head(3).index, 'color'] = 'top'  # Top 3
-                        chart_data.loc[chart_data.tail(3).index, 'color'] = 'bottom'  # Bottom 3
-                        
-                        # Create the chart with colored bars
-                        chart = alt.Chart(
-                            chart_data,
-                            height=400,
-                            width=800
-                        ).mark_bar().encode(
-                            x=alt.X('PLAYER NAME', sort=None),
-                            y=metric,
-                            color=alt.Color(
-                                'color:N',
-                                scale=alt.Scale(
-                                    domain=['top', 'middle', 'bottom'],
-                                    range=['green', 'gray', 'red']
-                                ),
-                                legend=None
+                        if metric in final_data.columns:
+                            st.write(f"**{metric} by Player**")
+                            
+                            # Prepare data with rankings
+                            chart_data = final_data.reset_index().sort_values(metric, ascending=False)
+                            
+                            # Create a color column based on ranking
+                            chart_data['color'] = 'middle'  # Default color
+                            if len(chart_data) >= 3:
+                                chart_data.loc[chart_data.head(3).index, 'color'] = 'top'  # Top 3
+                                chart_data.loc[chart_data.tail(3).index, 'color'] = 'bottom'  # Bottom 3
+                            
+                            # Create the chart with colored bars
+                            chart = alt.Chart(
+                                chart_data,
+                                height=400,
+                                width=800
+                            ).mark_bar().encode(
+                                x=alt.X('PLAYER NAME', sort=None),
+                                y=metric,
+                                color=alt.Color(
+                                    'color:N',
+                                    scale=alt.Scale(
+                                        domain=['top', 'middle', 'bottom'],
+                                        range=['green', 'gray', 'red']
+                                    ),
+                                    legend=None
+                                )
                             )
-                        )
-                        
-                        # Add value labels on top of bars
-                        text = chart.mark_text(
-                            align='center',
-                            baseline='bottom',
-                            dy=-5  # Adjust this value to control label position above bars
-                        ).encode(
-                            text=alt.Text(metric, format='.1f')
-                        )
-                        
-                        # Combine bar chart and labels
-                        final_chart = (chart + text)
-                        
-                        st.altair_chart(final_chart)
+                            
+                            # Add value labels on top of bars
+                            text = chart.mark_text(
+                                align='center',
+                                baseline='bottom',
+                                dy=-5  # Adjust this value to control label position above bars
+                            ).encode(
+                                text=alt.Text(metric, format='.1f')
+                            )
+                            
+                            # Combine bar chart and labels
+                            final_chart = (chart + text)
+                            
+                            st.altair_chart(final_chart, use_container_width=True)
                     
                     # Scatter plot for metrics
                     if len(selected_metrics) >= 2:
+                        st.subheader("Metric Correlations")
                         create_metric_scatter_plots(final_data, selected_metrics)
+        else:
+            st.info("Please select at least one drill to analyze.")
+    
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {str(e)}")
+        st.write("Please check your file format and try again.")
+        
+        # Debug information
+        with st.expander("Debug Information"):
+            st.write("Error details:", str(e))
+            if 'df' in locals():
+                st.write("Data shape:", df.shape if df is not None else "No data loaded")
+                st.write("Columns:", df.columns.tolist() if df is not None else "No columns")
+
+else:
+    st.info("Please upload a CSV file to begin analysis.")
+    st.write("""
+    **Expected file format:**
+    - CSV file with player performance data
+    - Required columns: Player Name, Drill/Split information, Start/End times
+    - Common metrics: Total Distance, Accelerations, Decelerations, etc.
+    """)
