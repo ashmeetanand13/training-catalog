@@ -138,36 +138,92 @@ def get_data_info(file):
         df.columns = df.columns.str.upper()  # Make all columns uppercase
         
         all_columns = df.columns.tolist()
+        
+        # Find the player name column (handle various possible names)
+        player_col = None
+        possible_player_cols = ['PLAYER NAME', 'PLAYER', 'NAME', 'PLAYERNAME', 'PLAYER_NAME']
+        
+        for col in possible_player_cols:
+            if col in df.columns:
+                player_col = col
+                break
+        
+        if player_col is None:
+            st.error(f"Could not find player name column. Available columns: {', '.join(all_columns)}")
+            st.write("Please ensure your CSV has a column named one of: " + ", ".join(possible_player_cols))
+            return df, all_columns, []
+        
+        # Clean player names and get unique values
+        df[player_col] = df[player_col].astype(str).str.strip()
+        df[player_col] = df[player_col].str.replace('\x00', '', regex=False)  # Remove null characters
+        player_names = df[player_col].unique().tolist()
+        
+        # Remove empty or invalid player names
+        player_names = [name for name in player_names if name and name != 'nan' and name.strip()]
+        
+        return df, all_columns, player_names
+        
+    except Exception as e:
+        st.error(f"Error cleaning dataframe: {str(e)}")
+        return None, [], []
+
+def parse_drill_name_format(drill_text):
+    """
+    Parse different drill name formats:
+    1. Semicolon-separated key-value pairs: "T=WU;V=Prepractice;N=24;A=;I=1of1;NT="
+    2. Colon-separated traditional format: "Drill:Type:Phase:etc"
+    """
+    drill_text = str(drill_text).strip()
     
-    # Find the player name column (handle various possible names)
-    player_col = None
-    possible_player_cols = ['PLAYER NAME', 'PLAYER', 'NAME', 'PLAYERNAME', 'PLAYER_NAME']
+    # Check if it's the semicolon key-value format
+    if ';' in drill_text and '=' in drill_text:
+        # Parse key-value pairs
+        pairs = {}
+        for pair in drill_text.split(';'):
+            if '=' in pair:
+                key, value = pair.split('=', 1)
+                pairs[key.strip()] = value.strip()
+        
+        # Create a meaningful drill name from the key-value pairs
+        drill_parts = []
+        
+        # Common key mappings for meaningful names
+        if 'T' in pairs and pairs['T']:  # Type
+            drill_parts.append(f"Type:{pairs['T']}")
+        if 'V' in pairs and pairs['V']:  # Version/Variation
+            drill_parts.append(f"Variation:{pairs['V']}")
+        if 'N' in pairs and pairs['N']:  # Number
+            drill_parts.append(f"N:{pairs['N']}")
+        if 'A' in pairs and pairs['A']:  # Activity
+            drill_parts.append(f"Activity:{pairs['A']}")
+        if 'I' in pairs and pairs['I']:  # Instance
+            drill_parts.append(f"Instance:{pairs['I']}")
+        
+        # If no meaningful parts found, use the first few non-empty values
+        if not drill_parts:
+            for key, value in pairs.items():
+                if value:  # Only include non-empty values
+                    drill_parts.append(f"{key}:{value}")
+                if len(drill_parts) >= 3:  # Limit to 3 parts
+                    break
+        
+        return ':'.join(drill_parts) if drill_parts else drill_text
     
-    for col in possible_player_cols:
-        if col in df.columns:
-            player_col = col
-            break
+    # Traditional colon-separated format
+    elif ':' in drill_text:
+        parts = drill_text.split(':')
+        # Take first 4 parts or all parts if less than 4
+        return ':'.join(parts[:4])
     
-    if player_col is None:
-        st.error(f"Could not find player name column. Available columns: {', '.join(all_columns)}")
-        st.write("Please ensure your CSV has a column named one of: " + ", ".join(possible_player_cols))
-        return df, all_columns, []
-    
-    # Clean player names and get unique values
-    df[player_col] = df[player_col].astype(str).str.strip()
-    df[player_col] = df[player_col].str.replace('\x00', '')  # Remove null characters
-    player_names = df[player_col].unique().tolist()
-    
-    # Remove empty or invalid player names
-    player_names = [name for name in player_names if name and name != 'nan' and name.strip()]
-    
-    return df, all_columns, player_names
+    # Single word or phrase - return as is
+    else:
+        return drill_text
 
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME','SPLIT START TIME','Start Time']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME','SPLIT END TIME','End Time']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','START TIME']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','END TIME']), None)
     
     if not start_col or not end_col:
         st.error("Could not find start/end time columns")
@@ -197,38 +253,39 @@ def get_drill_time(df):
 
 def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
-    # Find drill title column - check both naming conventions
-    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME', 'SPLIT NAME','Period Name']), None)
+    # Find drill title column - check various naming conventions
+    possible_drill_cols = [
+        'DRILL TITLE', 'DRILL NAME', 'SPLIT NAME', 'PERIOD NAME', 
+        'DRILL_TITLE', 'DRILL_NAME', 'SPLIT_NAME', 'PERIOD_NAME'
+    ]
+    
+    drill_col = None
+    for col in df.columns:
+        if col.upper() in possible_drill_cols:
+            drill_col = col
+            break
     
     if not drill_col:
         st.error("Could not find drill title column")
         st.write("Available columns:", df.columns.tolist())
+        st.write("Expected column names:", possible_drill_cols)
         raise ValueError("Could not find drill title column. Available columns: " + ", ".join(df.columns))
     
     try:
         # Convert drill titles to uppercase and clean them
         df[drill_col] = df[drill_col].astype(str).str.upper().str.strip()
-        df[drill_col] = df[drill_col].str.replace('\x00', '')  # Remove null characters
+        df[drill_col] = df[drill_col].str.replace('\x00', '', regex=False)  # Remove null characters
         
-        # Split and process drill titles
-        drill_title = df[drill_col].str.split(':', expand=True)
+        st.info(f"Found drill column: {drill_col}")
+        st.info(f"Sample drill name: {df[drill_col].iloc[0]}")
         
-        # Check how many columns we actually got after splitting
-        num_cols = len(drill_title.columns)
+        # Parse drill names using the new format-aware function
+        drill_names = df[drill_col].apply(parse_drill_name_format)
         
-        if num_cols < 5:
-            # If we have fewer than 5 columns, just use all available columns
-            drill_names = drill_title.iloc[:, :num_cols].apply(
-                lambda row: ':'.join(row.dropna().values.astype(str)), axis=1
-            )
-        else:
-            # Original logic for 5 or more columns
-            drill_title = drill_title[~drill_title[4].isna()]
-            drill_names = drill_title.iloc[:, :4].apply(
-                lambda row: ':'.join(row.values.astype(str)), axis=1
-            )
-        
+        # Get unique drills for display
         unique_drills = list(set(drill_names))
+        
+        st.info(f"Found {len(unique_drills)} unique drill patterns")
         
         # Perform fuzzy matching to combine similar drill names
         final_drills = []
@@ -236,9 +293,9 @@ def get_drill_names(df):
         
         for drill in unique_drills:
             if drill not in processed_drills:
-                # Find all similar drills with 96% or higher similarity
+                # Find all similar drills with 90% or higher similarity (lowered threshold for more variety)
                 matches = process.extract(drill, unique_drills, scorer=fuzz.ratio, limit=None)
-                similar_drills = [match[0] for match in matches if match[1] >= 96]
+                similar_drills = [match[0] for match in matches if match[1] >= 90]
                 
                 # Add all similar drills to processed set
                 processed_drills.update(similar_drills)
@@ -254,10 +311,23 @@ def get_drill_names(df):
             drill_mapping[drill] = best_match[0]
         
         # Apply the mapping to standardize drill names
-        return drill_names.map(drill_mapping)
+        standardized_names = drill_names.map(drill_mapping)
+        
+        # Show some examples for debugging
+        with st.expander("Drill Name Processing Examples"):
+            st.write("Sample original vs processed:")
+            for i in range(min(5, len(df))):
+                orig = df[drill_col].iloc[i]
+                processed = standardized_names.iloc[i]
+                st.write(f"Original: {orig}")
+                st.write(f"Processed: {processed}")
+                st.write("---")
+        
+        return standardized_names
     
     except Exception as e:
         st.error(f"Error processing drill names: {str(e)}")
+        st.write("Sample drill data:", df[drill_col].head().tolist() if drill_col else "No drill column found")
         raise
 
 def get_target_metric(df, selected_drills, metrics, drill_times):
