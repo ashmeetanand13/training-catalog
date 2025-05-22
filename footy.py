@@ -141,7 +141,7 @@ def get_data_info(file):
         
         # Find the player name column (handle various possible names)
         player_col = None
-        possible_player_cols = ['PLAYER NAME', 'PLAYER', 'NAME', 'PLAYERNAME', 'PLAYER_NAME']
+        possible_player_cols = ['PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYERNAME']
         
         for col in possible_player_cols:
             if col in df.columns:
@@ -153,10 +153,14 @@ def get_data_info(file):
             st.write("Please ensure your CSV has a column named one of: " + ", ".join(possible_player_cols))
             return df, all_columns, []
         
+        # Standardize the player column name to 'PLAYER_NAME' for consistency
+        if player_col != 'PLAYER_NAME':
+            df = df.rename(columns={player_col: 'PLAYER_NAME'})
+        
         # Clean player names and get unique values
-        df[player_col] = df[player_col].astype(str).str.strip()
-        df[player_col] = df[player_col].str.replace('\x00', '', regex=False)  # Remove null characters
-        player_names = df[player_col].unique().tolist()
+        df['PLAYER_NAME'] = df['PLAYER_NAME'].astype(str).str.strip()
+        df['PLAYER_NAME'] = df['PLAYER_NAME'].str.replace('\x00', '', regex=False)  # Remove null characters
+        player_names = df['PLAYER_NAME'].unique().tolist()
         
         # Remove empty or invalid player names
         player_names = [name for name in player_names if name and name != 'nan' and name.strip()]
@@ -344,10 +348,10 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
             if drill_data.empty:
                 continue
             
-            for player in drill_data['PLAYER NAME'].unique():
-                player_data = drill_data[drill_data['PLAYER NAME'] == player]
+            for player in drill_data['PLAYER_NAME'].unique():
+                player_data = drill_data[drill_data['PLAYER_NAME'] == player]
                 player_metrics = {
-                    "PLAYER NAME": player,
+                    "PLAYER_NAME": player,
                 }
                 
                 for metric in metrics:
@@ -366,7 +370,7 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
         
         if results:
             final_df = pd.DataFrame(results)
-            return final_df.groupby(['PLAYER NAME']).sum()
+            return final_df.groupby(['PLAYER_NAME']).sum()
         
         return pd.DataFrame()
     
@@ -386,7 +390,7 @@ def create_metric_scatter_plots(final_data, selected_metrics):
                 final_data_reset,
                 x=metric1,
                 y=metric2,
-                color='PLAYER NAME',
+                color='PLAYER_NAME',
                 title=f'{metric1} vs {metric2} by Player'
             )
             
@@ -475,7 +479,7 @@ if uploaded_file is not None:
             st.stop()
         
         # Filter data for selected players
-        df_filtered = df[df['PLAYER NAME'].isin(selected_players)]
+        df_filtered = df[df['PLAYER_NAME'].isin(selected_players)]
         
         if df_filtered.empty:
             st.error("No data found for selected players.")
