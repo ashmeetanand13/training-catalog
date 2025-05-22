@@ -210,8 +210,8 @@ def parse_drill_name_format(drill_text):
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','START_TIME']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','END_TIME']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','Start Time']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','End Time']), None)
     
     if not start_col or not end_col:
         st.error("Could not find start/end time columns")
