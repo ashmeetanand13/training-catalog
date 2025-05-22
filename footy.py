@@ -137,7 +137,7 @@ def get_drill_time(df):
 def get_drill_names(df):
     """Extract and process drill names"""
     
-    drill_patterns = ['DRILL_TITLE', 'DRILL_NAME', 'SPLIT_NAME', 'PERIOD_NAME']
+    drill_patterns = ['DRILL_TITLE', 'DRILL_NAME', 'SPLIT_NAME', 'PERIOD_NAME', 'PERIOD NAME']
     drill_col = None
     
     for pattern in drill_patterns:
