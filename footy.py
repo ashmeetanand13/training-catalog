@@ -125,29 +125,80 @@ def get_data_info(file):
         
         # Find the player name column (handle various possible names)
         player_col = None
-        possible_player_cols = ['PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYERNAME']
+        possible_player_cols = [
+            'PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYERNAME',
+            'FULL_NAME', 'ATHLETE_NAME', 'ATHLETE', 
+            'FIRST_NAME', 'LAST_NAME', 'PLAYER_FULL_NAME'
+        ]
         
+        st.write("**🔍 Player Column Detection:**")
+        st.write(f"Looking for player column patterns: {possible_player_cols}")
+        st.write(f"Available columns in your file: {all_columns}")
+        
+        # First try exact matches
         for col in possible_player_cols:
             if col in df.columns:
                 player_col = col
+                st.success(f"✅ Found exact match: {col}")
                 break
         
+        # If no exact match, try partial matches
         if player_col is None:
-            st.error(f"Could not find player name column. Available columns: {', '.join(all_columns)}")
-            st.write("Please ensure your CSV has a column named one of: " + ", ".join(possible_player_cols))
+            st.warning("⚠️ No exact match found, trying partial matches...")
+            for pattern in possible_player_cols:
+                for col in all_columns:
+                    if pattern in col or col in pattern:
+                        player_col = col
+                        st.info(f"📍 Found partial match: '{col}' matches pattern '{pattern}'")
+                        break
+                if player_col:
+                    break
+        
+        # If still no match, look for any column containing 'NAME'
+        if player_col is None:
+            st.warning("⚠️ No pattern match found, looking for any column with 'NAME'...")
+            name_columns = [col for col in all_columns if 'NAME' in col]
+            if name_columns:
+                player_col = name_columns[0]  # Take the first one
+                st.info(f"📍 Using first column containing 'NAME': {player_col}")
+                st.write(f"Other NAME columns available: {name_columns[1:] if len(name_columns) > 1 else 'None'}")
+        
+        if player_col is None:
+            st.error("❌ Could not find player name column")
+            st.write(f"**Available columns:** {', '.join(all_columns)}")
+            st.write("**Expected column patterns:** " + ", ".join(possible_player_cols))
+            st.write("**💡 Suggestion:** Please ensure your CSV has a column with player names.")
+            st.write("**Sample data from first few columns:**")
+            
+            # Show sample data to help user identify the player column
+            for i, col in enumerate(all_columns[:5]):  # Show first 5 columns
+                sample_values = df[col].head(3).tolist()
+                st.write(f"  {col}: {sample_values}")
+            
             return df, all_columns, []
+        
+        st.success(f"✅ Using player column: **{player_col}**")
         
         # Standardize the player column name to 'PLAYER_NAME' for consistency
         if player_col != 'PLAYER_NAME':
             df = df.rename(columns={player_col: 'PLAYER_NAME'})
+            st.info(f"📝 Renamed '{player_col}' to 'PLAYER_NAME' for consistency")
         
         # Clean player names and get unique values
         df['PLAYER_NAME'] = df['PLAYER_NAME'].astype(str).str.strip()
         df['PLAYER_NAME'] = df['PLAYER_NAME'].str.replace('\x00', '', regex=False)  # Remove null characters
-        player_names = df['PLAYER_NAME'].unique().tolist()
+        
+        # Show sample player names before filtering
+        raw_player_names = df['PLAYER_NAME'].unique().tolist()
+        st.write(f"📋 Found {len(raw_player_names)} unique entries in player column")
+        st.write(f"Sample entries: {raw_player_names[:5]}")
         
         # Remove empty or invalid player names
-        player_names = [name for name in player_names if name and name != 'nan' and name.strip()]
+        player_names = [name for name in raw_player_names if name and name != 'nan' and name.strip() and name.lower() != 'none']
+        
+        st.write(f"✅ After filtering: {len(player_names)} valid player names")
+        if player_names:
+            st.write(f"Valid players: {player_names[:10]}{'...' if len(player_names) > 10 else ''}")
         
         return df, all_columns, player_names
         
