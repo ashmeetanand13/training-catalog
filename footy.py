@@ -226,8 +226,8 @@ def parse_drill_name_format(drill_text):
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','START TIME']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','END TIME']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','START_TIME']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','END_TIME']), None)
     
     if not start_col or not end_col:
         st.error("Could not find start/end time columns")
@@ -259,7 +259,6 @@ def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
     # Find drill title column - check various naming conventions
     possible_drill_cols = [
-        'DRILL TITLE', 'DRILL NAME', 'SPLIT NAME', 'PERIOD NAME', 
         'DRILL_TITLE', 'DRILL_NAME', 'SPLIT_NAME', 'PERIOD_NAME'
     ]
     
@@ -317,15 +316,16 @@ def get_drill_names(df):
         # Apply the mapping to standardize drill names
         standardized_names = drill_names.map(drill_mapping)
         
-        # Show some examples for debugging
-        with st.expander("Drill Name Processing Examples"):
-            st.write("Sample original vs processed:")
-            for i in range(min(5, len(df))):
-                orig = df[drill_col].iloc[i]
-                processed = standardized_names.iloc[i]
-                st.write(f"Original: {orig}")
-                st.write(f"Processed: {processed}")
-                st.write("---")
+        # Show some examples for debugging (optional)
+        if st.checkbox("Show drill name processing examples", value=False):
+            with st.expander("Drill Name Processing Examples"):
+                st.write("Sample original vs processed:")
+                for i in range(min(3, len(df))):
+                    orig = df[drill_col].iloc[i]
+                    processed = standardized_names.iloc[i]
+                    st.write(f"Original: {orig}")
+                    st.write(f"Processed: {processed}")
+                    st.write("---")
         
         return standardized_names
     
@@ -444,7 +444,7 @@ if uploaded_file is not None:
         # Select metrics
         default_metrics = [
             "TOTAL DISTANCE",
-            "HIGH SPEED RUNNING ABSOLUTE",
+            "HIGH SPEED RUNNING ABSOLUTE", 
             "DISTANCE Z6 ABSOLUTE",
             "ACCELERATIONS",
             "DECELERATIONS"
@@ -504,12 +504,12 @@ if uploaded_file is not None:
         
         if force_check:
             drills_with_all_players = (
-                df_filtered.groupby('Drill title 2')['PLAYER NAME']
+                df_filtered.groupby('Drill title 2')['PLAYER_NAME']
                 .apply(lambda x: set(x) == set(selected_players))
                 .reset_index()
             )
             valid_drills = drills_with_all_players[
-                drills_with_all_players['PLAYER NAME'] == True
+                drills_with_all_players['PLAYER_NAME'] == True
             ]['Drill title 2']
             
             if len(valid_drills) == 0:
@@ -571,8 +571,13 @@ if uploaded_file is not None:
                         if metric in final_data.columns:
                             st.write(f"**{metric} by Player**")
                             
-                            # Prepare data with rankings
-                            chart_data = final_data.reset_index().sort_values(metric, ascending=False)
+                            # Prepare data with rankings - ensure proper column names
+                            chart_data = final_data.reset_index()
+                            chart_data = chart_data.sort_values(metric, ascending=False)
+                            
+                            # Ensure the player name column is properly named
+                            if 'index' in chart_data.columns:
+                                chart_data = chart_data.rename(columns={'index': 'PLAYER_NAME'})
                             
                             # Create a color column based on ranking
                             chart_data['color'] = 'middle'  # Default color
@@ -586,8 +591,8 @@ if uploaded_file is not None:
                                 height=400,
                                 width=800
                             ).mark_bar().encode(
-                                x=alt.X('PLAYER NAME', sort=None),
-                                y=metric,
+                                x=alt.X('PLAYER_NAME:N', sort=None),
+                                y=alt.Y(f'{metric}:Q'),
                                 color=alt.Color(
                                     'color:N',
                                     scale=alt.Scale(
@@ -602,9 +607,9 @@ if uploaded_file is not None:
                             text = chart.mark_text(
                                 align='center',
                                 baseline='bottom',
-                                dy=-5  # Adjust this value to control label position above bars
+                                dy=-5
                             ).encode(
-                                text=alt.Text(metric, format='.1f')
+                                text=alt.Text(f'{metric}:Q', format='.1f')
                             )
                             
                             # Combine bar chart and labels
