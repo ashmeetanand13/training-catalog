@@ -123,8 +123,8 @@ def get_data_info(file):
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME','SPLIT START TIME']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME','SPLIT END TIME']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL START TIME', 'START TIME','SPLIT START TIME','Start Time']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL END TIME', 'END TIME','SPLIT END TIME','End Time']), None)
     
     if not start_col or not end_col:
         st.error("Could not find start/end time columns")
@@ -155,7 +155,7 @@ def get_drill_time(df):
 def get_drill_names(df):
     """Extract and process drill names with fuzzy matching and uppercase standardization"""
     # Find drill title column - check both naming conventions
-    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME', 'SPLIT NAME']), None)
+    drill_col = next((col for col in df.columns if col.upper() in ['DRILL TITLE', 'DRILL NAME', 'SPLIT NAME','Period Name']), None)
     
     if not drill_col:
         st.error("Could not find drill title column")
