@@ -28,73 +28,116 @@ def get_data_info(file):
     """
     Read file and return all column names and unique player names.
     Works with both uploaded files and file paths.
-    Handles various encoding issues robustly.
+    Handles various encoding issues without external dependencies.
     """
     
     # List of common encodings to try in order of preference
-    encodings_to_try = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1', 'utf-16']
-    
-    # Try to detect encoding first
-    try:
-        detected_encoding, confidence = detect_encoding(file)
-        if detected_encoding and confidence > 0.7:
-            encodings_to_try.insert(0, detected_encoding)
-            st.info(f"Detected encoding: {detected_encoding} (confidence: {confidence:.2f})")
-    except Exception as e:
-        st.warning(f"Could not detect encoding automatically: {str(e)}")
+    encodings_to_try = [
+        'utf-8', 
+        'latin-1', 
+        'cp1252', 
+        'iso-8859-1', 
+        'utf-16',
+        'ascii'
+    ]
     
     df = None
     successful_encoding = None
     
+    # Try each encoding
     for encoding in encodings_to_try:
         try:
-            # Reset file pointer if it's a file-like object
+            # Reset file pointer if it's a file-like object (Streamlit uploader)
             if hasattr(file, 'seek'):
                 file.seek(0)
             
+            # Try to read with current encoding
             df = pd.read_csv(file, encoding=encoding)
             successful_encoding = encoding
-            st.success(f"Successfully read file with encoding: {encoding}")
+            st.success(f"✅ Successfully read file with {encoding} encoding")
             break
             
-        except UnicodeDecodeError:
+        except (UnicodeDecodeError, UnicodeError):
+            st.warning(f"❌ Failed with {encoding} encoding, trying next...")
             continue
         except Exception as e:
-            if "codec can't decode" in str(e).lower():
+            error_msg = str(e).lower()
+            if any(word in error_msg for word in ['codec', 'decode', 'unicode', 'encoding']):
+                st.warning(f"❌ Encoding issue with {encoding}, trying next...")
                 continue
             else:
-                # Other non-encoding related errors
-                st.error(f"Error reading file with {encoding}: {str(e)}")
-                continue
+                st.error(f"Non-encoding error with {encoding}: {str(e)}")
+                break
     
-    # If all encodings failed, try with error handling
+    # If standard encodings failed, try with error handling strategies
     if df is None:
-        try:
-            if hasattr(file, 'seek'):
-                file.seek(0)
-            df = pd.read_csv(file, encoding='utf-8', errors='replace')
-            st.warning("Read file with UTF-8 and character replacement - some characters may appear as �")
-        except Exception as e:
+        st.warning("🔄 Standard encodings failed, trying with error handling...")
+        
+        error_strategies = [
+            ('utf-8', 'replace'),
+            ('latin-1', 'ignore'),
+            ('cp1252', 'replace'),
+            ('utf-8', 'ignore')
+        ]
+        
+        for encoding, error_handling in error_strategies:
             try:
                 if hasattr(file, 'seek'):
                     file.seek(0)
-                df = pd.read_csv(file, encoding='latin-1', errors='ignore')
-                st.warning("Read file with Latin-1 and error ignoring - some characters may be missing")
+                
+                df = pd.read_csv(file, encoding=encoding, errors=error_handling)
+                st.info(f"✅ Read file with {encoding} encoding and '{error_handling}' error handling")
+                break
+                
             except Exception as e:
-                st.error(f"Could not read the file with any encoding method. Error: {str(e)}")
-                return None, [], []
+                continue
+    
+    # Final fallback: try to read as binary and convert
+    if df is None:
+        st.warning("🔄 Trying binary read approach...")
+        try:
+            if hasattr(file, 'seek'):
+                file.seek(0)
+            
+            # Read file content as bytes
+            if hasattr(file, 'read'):
+                content = file.read()
+                if isinstance(content, bytes):
+                    # Try to decode bytes to string
+                    for encoding in ['utf-8', 'latin-1', 'cp1252']:
+                        try:
+                            decoded_content = content.decode(encoding, errors='replace')
+                            # Create a StringIO object from the decoded content
+                            from io import StringIO
+                            string_io = StringIO(decoded_content)
+                            df = pd.read_csv(string_io)
+                            st.info(f"✅ Successfully read using binary approach with {encoding}")
+                            break
+                        except Exception as e:
+                            continue
+            
+        except Exception as e:
+            st.error(f"Binary read approach failed: {str(e)}")
     
     if df is None or df.empty:
-        st.error("Failed to read the CSV file or file is empty")
+        st.error("❌ Failed to read the CSV file with any method")
+        st.write("**Troubleshooting tips:**")
+        st.write("- Ensure the file is a valid CSV")
+        st.write("- Try opening the file in a text editor and saving it with UTF-8 encoding")
+        st.write("- Check if the file has any special characters")
         return None, [], []
     
-    # Clean up any potential encoding artifacts in column names
-    df.columns = df.columns.str.strip()  # Remove leading/trailing whitespace
-    df.columns = df.columns.str.replace('\ufeff', '')  # Remove BOM if present
-    df.columns = df.columns.str.replace('\x00', '')  # Remove null characters
-    df.columns = df.columns.str.upper()  # Make all columns uppercase
-    
-    all_columns = df.columns.tolist()
+    # Clean up the dataframe
+    try:
+        # Clean up column names
+        df.columns = df.columns.astype(str)  # Ensure all column names are strings
+        df.columns = df.columns.str.strip()  # Remove leading/trailing whitespace
+        df.columns = df.columns.str.replace('\ufeff', '', regex=False)  # Remove BOM
+        df.columns = df.columns.str.replace('\x00', '', regex=False)  # Remove null characters
+        df.columns = df.columns.str.replace(r'[^\w\s]', '_', regex=True)  # Replace special chars with underscore
+        df.columns = df.columns.str.upper()  # Make all columns uppercase
+        
+        all_columns = df.columns.tolist()
     
     # Find the player name column (handle various possible names)
     player_col = None
