@@ -125,7 +125,7 @@ def get_data_info(file):
         
         # Find the player name column (handle various possible names)
         player_col = None
-        possible_player_cols = ['PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYERNAME']
+        possible_player_cols = ['PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYER NAME']
         
         for col in possible_player_cols:
             if col in df.columns:
