@@ -7,28 +7,12 @@ from itertools import combinations
 from tqdm import tqdm
 from thefuzz import fuzz
 from thefuzz import process
-import chardet
-
-def detect_encoding(file):
-    """Detect the encoding of a file"""
-    if isinstance(file, str):
-        # File path
-        with open(file, 'rb') as f:
-            raw_data = f.read(10000)
-    else:
-        # File-like object (Streamlit uploader)
-        file.seek(0)
-        raw_data = file.read(10000)
-        file.seek(0)
-    
-    result = chardet.detect(raw_data)
-    return result['encoding'], result['confidence']
 
 def get_data_info(file):
     """
     Read file and return all column names and unique player names.
     Works with both uploaded files and file paths.
-    Handles various encoding issues without external dependencies.
+    Handles various encoding issues robustly.
     """
     
     # List of common encodings to try in order of preference
@@ -226,8 +210,8 @@ def parse_drill_name_format(drill_text):
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','START_TIME']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','END_TIME']), None)
+    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME']), None)
+    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME']), None)
     
     if not start_col or not end_col:
         st.error("Could not find start/end time columns")
@@ -241,14 +225,14 @@ def get_drill_time(df):
         # Handle Excel serial date numbers (like 45708.798)
         if sample_start.replace('.', '', 1).isdigit():
             # Convert Excel serial numbers to datetime
-            df['start time'] = pd.TimedeltaIndex(df[start_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
-            df['end time'] = pd.TimedeltaIndex(df[end_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
+            df['start_time'] = pd.TimedeltaIndex(df[start_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
+            df['end_time'] = pd.TimedeltaIndex(df[end_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
         else:
             # Regular datetime parsing for time strings (like '9:43:15')
-            df['start time'] = pd.to_datetime(df[start_col])
-            df['end time'] = pd.to_datetime(df[end_col])
+            df['start_time'] = pd.to_datetime(df[start_col])
+            df['end_time'] = pd.to_datetime(df[end_col])
         
-        return (df['end time'] - df['start time']).dt.total_seconds() / 60
+        return (df['end_time'] - df['start_time']).dt.total_seconds() / 60
     
     except Exception as e:
         st.error(f"Error processing time columns: {str(e)}")
@@ -343,7 +327,7 @@ def get_target_metric(df, selected_drills, metrics, drill_times):
     
     try:
         for drill, time_multiplier in zip(selected_drills, drill_times):
-            drill_data = df[df['Drill title 2'].str.upper() == drill]
+            drill_data = df[df['Drill_title_2'].str.upper() == drill]
             
             if drill_data.empty:
                 continue
@@ -443,9 +427,9 @@ if uploaded_file is not None:
         
         # Select metrics
         default_metrics = [
-            "TOTAL DISTANCE",
-            "HIGH SPEED RUNNING ABSOLUTE", 
-            "DISTANCE Z6 ABSOLUTE",
+            "TOTAL_DISTANCE",
+            "HIGH_SPEED_RUNNING_ABSOLUTE", 
+            "DISTANCE_Z6_ABSOLUTE",
             "ACCELERATIONS",
             "DECELERATIONS"
         ]
@@ -479,7 +463,7 @@ if uploaded_file is not None:
             st.stop()
         
         # Filter data for selected players
-        df_filtered = df[df['PLAYER_NAME'].isin(selected_players)]
+        df_filtered = df[df['PLAYER_NAME'].isin(selected_players)].copy()
         
         if df_filtered.empty:
             st.error("No data found for selected players.")
@@ -494,7 +478,7 @@ if uploaded_file is not None:
         
         # Process drill names
         try:
-            df_filtered['Drill title 2'] = get_drill_names(df_filtered)
+            df_filtered['Drill_title_2'] = get_drill_names(df_filtered)
         except Exception as e:
             st.error(f"Could not process drill names: {str(e)}")
             st.stop()
@@ -504,13 +488,13 @@ if uploaded_file is not None:
         
         if force_check:
             drills_with_all_players = (
-                df_filtered.groupby('Drill title 2')['PLAYER_NAME']
+                df_filtered.groupby('Drill_title_2')['PLAYER_NAME']
                 .apply(lambda x: set(x) == set(selected_players))
                 .reset_index()
             )
             valid_drills = drills_with_all_players[
                 drills_with_all_players['PLAYER_NAME'] == True
-            ]['Drill title 2']
+            ]['Drill_title_2']
             
             if len(valid_drills) == 0:
                 st.warning("No drills found with all selected players. Try unchecking the filter.")
