@@ -125,7 +125,7 @@ def get_data_info(file):
         
         # Find the player name column (handle various possible names)
         player_col = None
-        possible_player_cols = ['PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYER NAME']
+        possible_player_cols = ['PLAYER_NAME', 'PLAYER', 'NAME', 'PLAYERNAME']
         
         for col in possible_player_cols:
             if col in df.columns:
@@ -209,34 +209,91 @@ def parse_drill_name_format(drill_text):
 
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
-    # Find start time column - check both naming conventions
-    start_col = next((col for col in df.columns if col in ['DRILL_START_TIME', 'START_TIME','SPLIT_START_TIME','Start Time']), None)
-    end_col = next((col for col in df.columns if col in ['DRILL_END_TIME', 'END_TIME','SPLIT_END_TIME','End Time']), None)
+    # Expanded list of possible start time column names
+    start_time_patterns = [
+        'DRILL_START_TIME', 'START_TIME', 'SPLIT_START_TIME', 
+        'PERIOD_START_TIME', 'START', 'TIME_START', 'BEGIN_TIME',
+        'DRILL_START', 'SPLIT_START', 'PERIOD_START'
+    ]
+    
+    # Expanded list of possible end time column names  
+    end_time_patterns = [
+        'DRILL_END_TIME', 'END_TIME', 'SPLIT_END_TIME',
+        'PERIOD_END_TIME', 'END', 'TIME_END', 'FINISH_TIME',
+        'DRILL_END', 'SPLIT_END', 'PERIOD_END'
+    ]
+    
+    # Find start time column
+    start_col = None
+    for pattern in start_time_patterns:
+        if pattern in df.columns:
+            start_col = pattern
+            break
+    
+    # Find end time column
+    end_col = None
+    for pattern in end_time_patterns:
+        if pattern in df.columns:
+            end_col = pattern
+            break
+    
+    # Debug: Show what we found and what's available
+    st.write("**Time Column Detection:**")
+    st.write(f"🔍 Looking for start time columns: {start_time_patterns}")
+    st.write(f"🔍 Looking for end time columns: {end_time_patterns}")
+    st.write(f"✅ Found start column: {start_col}")
+    st.write(f"✅ Found end column: {end_col}")
     
     if not start_col or not end_col:
-        st.error("Could not find start/end time columns")
-        st.write("Available columns:", df.columns.tolist())
+        st.error("❌ Could not find start/end time columns")
+        st.write("**Available columns in your file:**")
+        st.write(df.columns.tolist())
+        
+        # Try to find any columns with 'TIME' in the name
+        time_related_cols = [col for col in df.columns if 'TIME' in col.upper()]
+        if time_related_cols:
+            st.write("**Columns containing 'TIME':**")
+            st.write(time_related_cols)
+        
+        # Show sample data from first few columns to help identify time columns
+        st.write("**Sample data from first 5 columns:**")
+        sample_cols = df.columns[:5]
+        for col in sample_cols:
+            st.write(f"{col}: {df[col].iloc[0]}")
+        
+        # Suggest manual column mapping
+        st.write("**💡 Suggestion:**")
+        st.write("Please check your CSV file and ensure it has start/end time columns.")
+        st.write("Common names: 'Start Time', 'End Time', 'Period Start Time', 'Period End Time'")
+        
         raise ValueError("Could not find start/end time columns")
     
     try:
         # Check the format of time values
         sample_start = str(df[start_col].iloc[0])
+        st.write(f"📋 Sample start time value: {sample_start}")
         
         # Handle Excel serial date numbers (like 45708.798)
         if sample_start.replace('.', '', 1).isdigit():
+            st.info("🔢 Detected Excel serial date format")
             # Convert Excel serial numbers to datetime
             df['start_time'] = pd.TimedeltaIndex(df[start_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
             df['end_time'] = pd.TimedeltaIndex(df[end_col] % 1 * 86400, unit='s') + pd.Timestamp('1900-01-01')
         else:
+            st.info("🕐 Detected text time format")
             # Regular datetime parsing for time strings (like '9:43:15')
             df['start_time'] = pd.to_datetime(df[start_col])
             df['end_time'] = pd.to_datetime(df[end_col])
         
-        return (df['end_time'] - df['start_time']).dt.total_seconds() / 60
+        duration = (df['end_time'] - df['start_time']).dt.total_seconds() / 60
+        st.success(f"✅ Successfully calculated drill times. Average duration: {duration.mean():.1f} minutes")
+        return duration
     
     except Exception as e:
-        st.error(f"Error processing time columns: {str(e)}")
-        st.write("Sample start time value:", sample_start)
+        st.error(f"❌ Error processing time columns: {str(e)}")
+        st.write("**Debug info:**")
+        st.write(f"Start column '{start_col}' sample values:", df[start_col].head(3).tolist())
+        st.write(f"End column '{end_col}' sample values:", df[end_col].head(3).tolist())
         raise
 
 def get_drill_names(df):
