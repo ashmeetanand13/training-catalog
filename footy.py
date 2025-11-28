@@ -95,8 +95,8 @@ def parse_drill_name_format(drill_text):
 def get_drill_time(df):
     """Calculate drill duration in minutes"""
     
-    start_patterns = ['START_TIME', 'DRILL_START_TIME', 'SPLIT_START_TIME', 'PERIOD_START_TIME','START TIME']
-    end_patterns = ['END_TIME', 'DRILL_END_TIME', 'SPLIT_END_TIME', 'PERIOD_END_TIME','END TIME']
+    start_patterns = ['START_TIME', 'DRILL_START_TIME', 'SPLIT_START_TIME', 'PERIOD_START_TIME','START TIME','Start.Time','START.TIME']
+    end_patterns = ['END_TIME', 'DRILL_END_TIME', 'SPLIT_END_TIME', 'PERIOD_END_TIME','END TIME','End.Time','END.TIME']
     
     start_col = None
     end_col = None
@@ -137,7 +137,7 @@ def get_drill_time(df):
 def get_drill_names(df):
     """Extract and process drill names"""
     
-    drill_patterns = ['DRILL_TITLE', 'DRILL_NAME', 'SPLIT_NAME', 'PERIOD_NAME', 'PERIOD NAME']
+    drill_patterns = ['DRILL_TITLE', 'DRILL_NAME', 'SPLIT_NAME', 'PERIOD_NAME', 'PERIOD NAME','DRILL','Drill']
     drill_col = None
     
     for pattern in drill_patterns:
